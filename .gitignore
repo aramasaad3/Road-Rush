@@ -1,0 +1,21 @@
+# Python
+__pycache__/
+*.pyc
+*.pyo
+
+# PyInstaller output
+build/
+dist/
+*.spec
+
+# Buildozer build artifacts
+.buildozer/
+bin/
+
+# Extracted pptx text
+extracted_text.txt
+read_pptx.py
+
+# OS
+.DS_Store
+Thumbs.db

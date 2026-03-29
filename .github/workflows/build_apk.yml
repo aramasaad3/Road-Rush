@@ -1,0 +1,81 @@
+name: Build Android APK
+
+on:
+  push:
+    branches: [ main ]
+  workflow_dispatch:  # allows manual trigger from GitHub UI
+
+jobs:
+  build-apk:
+    runs-on: ubuntu-22.04
+
+    steps:
+      # ── 1. Checkout code ────────────────────────────────────────────────────
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      # ── 2. Set up Python ────────────────────────────────────────────────────
+      - name: Set up Python 3.10
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.10"
+
+      # ── 3. Install system dependencies needed by Buildozer / Android SDK ───
+      - name: Install system dependencies
+        run: |
+          sudo apt-get update -qq
+          sudo apt-get install -y \
+            git zip unzip curl wget \
+            openjdk-17-jdk \
+            python3-pip \
+            build-essential \
+            libssl-dev \
+            libffi-dev \
+            libltdl-dev \
+            libgdbm-dev \
+            libbz2-dev \
+            zlib1g-dev \
+            autoconf \
+            libtool \
+            pkg-config \
+            cmake \
+            libncurses5-dev \
+            ccache \
+            lld
+
+      # ── 4. Install Buildozer & Cython ───────────────────────────────────────
+      - name: Install Buildozer and Cython
+        run: |
+          pip install --upgrade pip
+          pip install buildozer cython==0.29.37
+
+      # ── 5. Cache the Buildozer global directory (speeds up repeat builds) ──
+      - name: Cache Buildozer global directory
+        uses: actions/cache@v4
+        with:
+          path: ~/.buildozer
+          key: buildozer-${{ runner.os }}-${{ hashFiles('buildozer.spec') }}
+          restore-keys: |
+            buildozer-${{ runner.os }}-
+
+      # ── 6. Build the APK (debug) ─────────────────────────────────────────
+      - name: Build APK
+        run: |
+          yes | buildozer android debug 2>&1 | tee build.log
+
+      # ── 7. Upload the APK as a downloadable artifact ────────────────────────
+      - name: Upload APK artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: RoadRush-APK
+          path: bin/*.apk
+          retention-days: 30
+
+      # ── 8. Upload build log in case of failure ───────────────────────────────
+      - name: Upload build log (on failure)
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: build-log
+          path: build.log
+          retention-days: 7
