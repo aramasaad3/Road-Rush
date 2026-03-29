@@ -61,7 +61,10 @@ jobs:
       # ── 6. Build the APK (debug) ─────────────────────────────────────────
       - name: Build APK
         run: |
+          set -o pipefail
           yes | buildozer android debug 2>&1 | tee build.log
+          # List files to see where the APK actually ended up
+          ls -R
 
       # ── 7. Upload the APK as a downloadable artifact ────────────────────────
       - name: Upload APK artifact
@@ -69,11 +72,11 @@ jobs:
         with:
           name: RoadRush-APK
           path: bin/*.apk
-          retention-days: 30
+          retention-days: 7
 
-      # ── 8. Upload build log in case of failure ───────────────────────────────
-      - name: Upload build log (on failure)
-        if: failure()
+      # ── 8. Always upload build log for debugging ──────────────────────────────
+      - name: Upload build log
+        if: always()
         uses: actions/upload-artifact@v4
         with:
           name: build-log
