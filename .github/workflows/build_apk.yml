@@ -9,6 +9,10 @@ jobs:
   build-apk:
     runs-on: ubuntu-22.04
 
+    env:
+      ANDROID_HOME: /usr/local/lib/android/sdk
+      ANDROID_SDK_ROOT: /usr/local/lib/android/sdk
+
     steps:
       # ── 1. Checkout code ────────────────────────────────────────────────────
       - name: Checkout repository
@@ -20,7 +24,7 @@ jobs:
         with:
           python-version: "3.10"
 
-      # ── 3. Install system dependencies needed by Buildozer / Android SDK ───
+      # ── 3. Install system dependencies ──────────────────────────────────────
       - name: Install system dependencies
         run: |
           sudo apt-get update -qq
@@ -41,15 +45,26 @@ jobs:
             cmake \
             libncurses5-dev \
             ccache \
-            lld
+            lld \
+            autoconf \
+            automake
 
       # ── 4. Install Buildozer & Cython ───────────────────────────────────────
       - name: Install Buildozer and Cython
         run: |
-          pip install --upgrade pip
-          pip install buildozer cython==0.29.37
+          pip install --upgrade pip setuptools wheel
+          pip install buildozer==1.5.0 cython==0.29.37
 
-      # ── 5. Cache the Buildozer global directory (speeds up repeat builds) ──
+      # ── 5. Accept Android SDK licenses (no interactive prompt) ──────────────
+      - name: Accept Android SDK licenses
+        run: |
+          mkdir -p $ANDROID_HOME/licenses
+          printf "8933bad161af4178b1185d1a37fbf41ea5269c55\nd56f5187479451eabf01fb78af6dfcb131a6481e\n24333f8a63b6825ea9c5514f83c2829b004d1fee" \
+            > $ANDROID_HOME/licenses/android-sdk-license
+          printf "84831b9409646a918e30573bab4c9c91346d8abd" \
+            > $ANDROID_HOME/licenses/android-sdk-preview-license
+
+      # ── 6. Cache the Buildozer global directory ──────────────────────────────
       - name: Cache Buildozer global directory
         uses: actions/cache@v4
         with:
@@ -58,23 +73,26 @@ jobs:
           restore-keys: |
             buildozer-${{ runner.os }}-
 
-      # ── 6. Build the APK (debug) ─────────────────────────────────────────
+      # ── 7. Build the APK (debug) ─────────────────────────────────────────────
       - name: Build APK
+        env:
+          # Suppress any interactive prompts from python-for-android / SDK tools
+          DEBIAN_FRONTEND: noninteractive
+          JAVA_HOME: /usr/lib/jvm/temurin-17-jdk-amd64
         run: |
-          set -o pipefail
-          yes | buildozer android debug 2>&1 | tee build.log
-          # List files to see where the APK actually ended up
-          ls -R
+          buildozer android debug 2>&1 | tee build.log
+          ls -la bin/ || echo "bin/ directory not found — check build.log"
 
-      # ── 7. Upload the APK as a downloadable artifact ────────────────────────
+      # ── 8. Upload the APK as a downloadable artifact ────────────────────────
       - name: Upload APK artifact
+        if: success()
         uses: actions/upload-artifact@v4
         with:
           name: RoadRush-APK
           path: bin/*.apk
-          retention-days: 7
+          retention-days: 30
 
-      # ── 8. Always upload build log for debugging ──────────────────────────────
+      # ── 9. Always upload build log for debugging ─────────────────────────────
       - name: Upload build log
         if: always()
         uses: actions/upload-artifact@v4
