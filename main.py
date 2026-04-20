@@ -10,121 +10,17 @@ import pygame
 import sys
 import random
 from settings import *
-from sprites import Player, YellowCar, RedCar, Blocker, Coin
-
-
-# ─────────────────────────────────────────────────────────────────────────────
-# UI helpers
-# ─────────────────────────────────────────────────────────────────────────────
-def draw_heart(surf, x, y, filled=True):
-    """Draw a ♥ heart icon at (x, y)."""
-    color = RED if filled else (80, 40, 40)
-    # Two circles + triangle approximation
-    pygame.draw.circle(surf, color, (x + 6,  y + 6),  7)
-    pygame.draw.circle(surf, color, (x + 18, y + 6),  7)
-    pts = [(x, y + 10), (x + 12, y + 26), (x + 24, y + 10)]
-    pygame.draw.polygon(surf, color, pts)
-
-
-def draw_star(surf, x, y, filled=True):
-    """Draw a ★ star outline at (x, y)."""
-    color = GOLD if filled else (80, 70, 20)
-    cx, cy = x + 13, y + 13
-    pts = []
-    for i in range(5):
-        outer_a = -90 + 72 * i
-        inner_a =  outer_a + 36
-        ox = cx + 13 * pygame.math.Vector2(1, 0).rotate(outer_a).x
-        oy = cy + 13 * pygame.math.Vector2(1, 0).rotate(outer_a).y
-        ix = cx +  6 * pygame.math.Vector2(1, 0).rotate(inner_a).x
-        iy = cy +  6 * pygame.math.Vector2(1, 0).rotate(inner_a).y
-        pts.extend([(ox, oy), (ix, iy)])
-    pygame.draw.polygon(surf, color, pts)
-
-
-def load_font(size):
-    try:
-        return pygame.font.SysFont("Segoe UI", size, bold=True)
-    except Exception:
-        return pygame.font.SysFont("Arial", size, bold=True)
-
-
-# ─────────────────────────────────────────────────────────────────────────────
-# SFX stub  – replace file paths with real .wav/.ogg files if you have them
-# ─────────────────────────────────────────────────────────────────────────────
-class SoundManager:
-    def __init__(self):
-        self.enabled = pygame.mixer.get_init() is not None
-        self._sounds = {}
-
-    def load(self, name, path):
-        if not self.enabled:
-            return
-        try:
-            snd = pygame.mixer.Sound(path)
-            self._sounds[name] = snd
-        except Exception:
-            pass  # file missing → silence
-
-    def play(self, name):
-        snd = self._sounds.get(name)
-        if snd:
-            snd.play()
-
-    def play_music(self, path, loops=-1):
-        if not self.enabled:
-            return
-        try:
-            pygame.mixer.music.load(path)
-            pygame.mixer.music.set_volume(0.4)
-            pygame.mixer.music.play(loops)
-        except Exception:
-            pass
-
-    def stop_music(self):
-        if self.enabled:
-            try:
-                pygame.mixer.music.stop()
-            except Exception:
-                pass
-
-
-# ─────────────────────────────────────────────────────────────────────────────
-# Road background renderer
-# ─────────────────────────────────────────────────────────────────────────────
-class RoadRenderer:
-    def __init__(self):
-        self.scroll = 0.0
-        # Pre-render one tile of the road (2× screen height to allow seamless loop)
-        self.tile_h = HEIGHT
-        self._tile  = self._make_tile()
-
-    def _make_tile(self):
-        surf = pygame.Surface((WIDTH, self.tile_h))
-        surf.fill(ROAD_COLOR)
-        # Grass strips
-        pygame.draw.rect(surf, GRASS_LEFT,  (0,           0, GRASS_W, self.tile_h))
-        pygame.draw.rect(surf, GRASS_RIGHT, (ROAD_RIGHT,  0, GRASS_W, self.tile_h))
-        # Curb lines
-        pygame.draw.rect(surf, WHITE, (GRASS_W - 2, 0, 4, self.tile_h))
-        pygame.draw.rect(surf, WHITE, (ROAD_RIGHT - 2, 0, 4, self.tile_h))
-        # Lane dashes
-        dash_step = DASH_HEIGHT + DASH_GAP
-        for lane in range(1, LANE_COUNT):
-            lx = ROAD_LEFT + lane * LANE_WIDTH - DASH_WIDTH // 2
-            for dy in range(0, self.tile_h + dash_step, dash_step):
-                pygame.draw.rect(surf, LANE_LINE, (lx, dy, DASH_WIDTH, DASH_HEIGHT))
-        return surf
-
-    def update(self, speed):
-        self.scroll += speed
-        if self.scroll >= self.tile_h:
-            self.scroll -= self.tile_h
-
-    def draw(self, screen):
-        offset = int(self.scroll)
-        screen.blit(self._tile, (0, offset - self.tile_h))
-        screen.blit(self._tile, (0, offset))
+from models.entities import Player, YellowCar, RedCar, Blocker, Coin, HeartPickup
+from models.resources import HealthSystem, ScoreSystem, RecordSystem
+from views.sound import SoundManager
+from views.graphics import RoadRenderer
+from controllers.collision import CollisionSystem
+from models.road import RoadSystem
+from models.difficulty import ProgressionSystem
+from controllers.traffic import Spawner
+from controllers.controls import InputHandler
+from views.hud import HUD, load_font
+from views.feedback import FeedbackScreens
 
 
 # ─────────────────────────────────────────────────────────────────────────────
@@ -136,6 +32,7 @@ class Game:
     STATE_PLAYING  = "PLAYING"
     STATE_GAMEOVER = "GAMEOVER"
     STATE_VICTORY  = "VICTORY"
+    STATE_PAUSED   = "PAUSED"
 
     def __init__(self):
         pygame.init()
@@ -150,24 +47,37 @@ class Game:
         self.font_big    = load_font(46)
         self.font_medium = load_font(28)
         self.font_small  = load_font(20)
+        self.hud = HUD(self.font_small)
+        self.feedback = FeedbackScreens(self.font_title, self.font_big, self.font_medium, self.font_small)
 
         # Custom events
         self.EV_SPAWN_OBSTACLE = pygame.USEREVENT + 1
         self.EV_SPAWN_COIN     = pygame.USEREVENT + 2
 
-        # Sound
         self.sfx = SoundManager()
-        # Uncomment and add file paths when you have assets:
-        # self.sfx.load("crash", "assets/sounds/crash.wav")
-        # self.sfx.load("coin",  "assets/sounds/coin.wav")
-        # self.sfx.load("star",  "assets/sounds/star.wav")
-        # self.sfx.play_music("assets/sounds/bgm.ogg")
+        import os, sys
+        def r_path(p):
+            return os.path.join(getattr(sys, '_MEIPASS', os.path.abspath(".")), p)
+        self.r_path_func = r_path
+
+        self.sfx.load("crash", r_path("assets/sounds/crash.wav"))
+        self.sfx.load("coin",  r_path("assets/sounds/coin.wav"))
+        self.sfx.load("star",  r_path("assets/sounds/star.wav"))
+        self.sfx.load("win",   r_path("assets/sounds/win.wav"))
+        self.sfx.load("lose",  r_path("assets/sounds/lose.wav"))
+        self.sfx.play_music(r_path("assets/sounds/spinopel-speed-race-344521.mp3"))
+        
+        self.collision_system = CollisionSystem(self.sfx)
 
         # Road
-        self.road = RoadRenderer()
+        self.road_system = RoadSystem()
+        self.road = RoadRenderer(self.road_system)
 
         # State
         self.state = self.STATE_START
+
+        # Persistent record for Endless mode
+        self.record = RecordSystem()
 
         # Placeholders so draw() never crashes before new_game()
         self.player = Player()
@@ -175,13 +85,15 @@ class Game:
         self.enemies     = pygame.sprite.Group()
         self.blockers    = pygame.sprite.Group()
         self.coins_group = pygame.sprite.Group()
-        self.speed = INITIAL_SPEED
+        self.progression = ProgressionSystem(1)
+        self.health_system = HealthSystem()
+        self.score_system = ScoreSystem(1)
         self.tutorial_timer = 180  # frames to show tutorial
 
     # ── New / restart game ────────────────────────────────────────────────────
-    def new_game(self):
-        self.speed = INITIAL_SPEED
-        self.last_speed_tick = pygame.time.get_ticks()
+    def new_game(self, mode):
+        self.current_mode = mode
+        self.progression = ProgressionSystem(mode)
 
         self.all_sprites = pygame.sprite.Group()
         self.enemies     = pygame.sprite.Group()
@@ -191,83 +103,74 @@ class Game:
         self.player = Player()
         self.all_sprites.add(self.player)
 
+        self.health_system = HealthSystem()
+        self.score_system = ScoreSystem(mode)
         self.tutorial_timer = 180
+        self.boost_timer = 0  # frames remaining for coin boost
+        self.boost_speed_bonus = 3.0
+        self.spawner = Spawner(self.player, self.all_sprites, self.enemies, self.blockers, self.coins_group, mode)
+        self.hearts_group = pygame.sprite.Group()
+        self.next_heart_distance = 500  # first heart at 500m
 
-        pygame.time.set_timer(self.EV_SPAWN_OBSTACLE, OBSTACLE_SPAWN_INIT_MS)
-        pygame.time.set_timer(self.EV_SPAWN_COIN,     COIN_SPAWN_MS)
+        pygame.time.set_timer(self.EV_SPAWN_OBSTACLE, Spawner.OBSTACLE_SPAWN_INIT_MS)
+        pygame.time.set_timer(self.EV_SPAWN_COIN,     Spawner.COIN_SPAWN_MS)
 
-    # ── Spawning ──────────────────────────────────────────────────────────────
-    def _spawn_obstacle(self):
-        lane = random.randint(0, LANE_COUNT - 1)
-        r    = random.random()
-        if r < 0.20:
-            obj = Blocker(lane, -CAR_H)
-            self.blockers.add(obj)
-        elif r < 0.65:
-            obj = YellowCar(lane, -CAR_H)
-            self.enemies.add(obj)
-        else:
-            obj = RedCar(-CAR_H, self.player)
-            self.enemies.add(obj)
-        self.all_sprites.add(obj)
 
-    def _spawn_coins(self):
-        lane  = random.randint(0, LANE_COUNT - 1)
-        count = random.randint(1, 4)
-        for i in range(count):
-            c = Coin(lane, -40 - i * 40)
-            self.coins_group.add(c)
-            self.all_sprites.add(c)
 
     # ── Event handling ────────────────────────────────────────────────────────
     def handle_events(self):
         for event in pygame.event.get():
             if event.type == pygame.QUIT:
                 self.running = False
+            
+            if InputHandler.is_quit_to_menu(event):
+                if self.state == self.STATE_PLAYING:
+                    pygame.mixer.music.pause()
+                    self.state = self.STATE_PAUSED
 
             # ── START screen ──────────────────────────────────────────────────
             elif self.state == self.STATE_START:
-                if event.type in (pygame.KEYDOWN, pygame.MOUSEBUTTONDOWN, pygame.FINGERDOWN):
+                mode = InputHandler.get_mode_selection(event, WIDTH, HEIGHT)
+                if mode is not None:
                     self.state = self.STATE_PLAYING
-                    self.new_game()
+                    if getattr(self, 'r_path_func', None):
+                        self.sfx.play_music(self.r_path_func("assets/sounds/lnplusmusic-racing-speed-driving-music-416549.mp3"))
+                    self.new_game(mode)
+
+            # ── PAUSED screen ─────────────────────────────────────────────────
+            elif self.state == self.STATE_PAUSED:
+                action = InputHandler.get_pause_interaction(event, WIDTH, HEIGHT)
+                if action == "RESUME":
+                    pygame.mixer.music.unpause()
+                    self.state = self.STATE_PLAYING
+                elif action == "QUIT":
+                    self.state = self.STATE_START
+                    if getattr(self, 'r_path_func', None):
+                        self.sfx.play_music(self.r_path_func("assets/sounds/spinopel-speed-race-344521.mp3"))
 
             # ── GAMEOVER / VICTORY screen ─────────────────────────────────────
             elif self.state in (self.STATE_GAMEOVER, self.STATE_VICTORY):
-                if event.type in (pygame.KEYDOWN, pygame.MOUSEBUTTONDOWN, pygame.FINGERDOWN):
+                if InputHandler.is_menu_advance_event(event):
                     self.state = self.STATE_START
+                    if getattr(self, 'r_path_func', None):
+                        self.sfx.play_music(self.r_path_func("assets/sounds/spinopel-speed-race-344521.mp3"))
 
             # ── PLAYING ───────────────────────────────────────────────────────
             if self.state == self.STATE_PLAYING:
                 if event.type == self.EV_SPAWN_OBSTACLE:
-                    self._spawn_obstacle()
+                    self.spawner.spawn_obstacle()
                     # Tighten interval as speed grows
                     interval = max(
-                        OBSTACLE_SPAWN_MIN_MS,
-                        int(OBSTACLE_SPAWN_INIT_MS - (self.speed - INITIAL_SPEED) * 150)
+                        Spawner.OBSTACLE_SPAWN_MIN_MS,
+                        int(Spawner.OBSTACLE_SPAWN_INIT_MS - (self.progression.speed - self.progression.INITIAL_SPEED) * 150)
                     )
                     pygame.time.set_timer(self.EV_SPAWN_OBSTACLE, interval)
 
                 elif event.type == self.EV_SPAWN_COIN:
-                    self._spawn_coins()
+                    self.spawner.spawn_coins()
 
-                # ── Keyboard (PC) ─────────────────────────────────────────────
-                elif event.type == pygame.KEYDOWN:
-                    if   event.key == pygame.K_LEFT:
-                        self.player.move_left()
-                    elif event.key == pygame.K_RIGHT:
-                        self.player.move_right()
-                    elif event.key == pygame.K_a:
-                        self.player.move_left()
-                    elif event.key == pygame.K_d:
-                        self.player.move_right()
-
-                # ── Touch (Android) ───────────────────────────────────────────
-                # event.x is normalised 0.0–1.0 across screen width
-                elif event.type == pygame.FINGERDOWN:
-                    if event.x < 0.5:
-                        self.player.move_left()
-                    else:
-                        self.player.move_right()
+                else:
+                    InputHandler.handle_player_input(event, self.player)
 
     # ── Update ────────────────────────────────────────────────────────────────
     def update(self):
@@ -275,163 +178,121 @@ class Game:
             return
 
         # Speed ramp
-        now = pygame.time.get_ticks()
-        if now - self.last_speed_tick >= SPEED_INCREASE_MS:
-            self.speed = min(self.speed + SPEED_INCREMENT, MAX_SPEED)
-            self.last_speed_tick = now
+        self.progression.update()
+        
+        # Boost handling
+        if self.boost_timer > 0:
+            self.boost_timer -= 1
+            effective_speed = self.progression.speed + self.boost_speed_bonus
+            # Player is invincible during boost
+            self.player.inv_frames = max(self.player.inv_frames, 2)
+            if self.boost_timer == 0:
+                # Boost just ended, restore normal state
+                self.player.inv_frames = 0
+        else:
+            effective_speed = self.progression.speed
+        
+        self.score_system.add_distance(effective_speed)
 
         # Tutorial countdown
         if self.tutorial_timer > 0:
             self.tutorial_timer -= 1
 
         # Road scroll
-        self.road.update(self.speed)
+        self.road_system.update(effective_speed)
 
         # Sprites
         self.player.update()
-        self.enemies.update(self.speed)
-        self.blockers.update(self.speed)
-        self.coins_group.update(self.speed)
+        self.enemies.update(effective_speed)
+        self.blockers.update(effective_speed)
+        self.coins_group.update(effective_speed)
+        self.hearts_group.update(effective_speed)
 
-        # ── Collision: enemy / blocker → damage ───────────────────────────────
-        hit_enemy   = pygame.sprite.spritecollideany(self.player, self.enemies,   pygame.sprite.collide_rect_ratio(0.75))
-        hit_blocker = pygame.sprite.spritecollideany(self.player, self.blockers,  pygame.sprite.collide_rect_ratio(0.75))
+        # ── Endless mode: spawn heart every 500m ─────────────────────────────
+        if self.score_system.mode == 3 and self.score_system.distance >= self.next_heart_distance:
+            self.next_heart_distance += 500
+            import random
+            occupied = {s.lane_index for s in self.enemies} | {s.lane_index for s in self.blockers}
+            free_lanes = [l for l in range(RoadSystem.LANE_COUNT) if l not in occupied]
+            if free_lanes:
+                lane = random.choice(free_lanes)
+                h = HeartPickup(lane, -40)
+                self.hearts_group.add(h)
+                self.all_sprites.add(h)
 
-        if hit_enemy or hit_blocker:
-            took_damage = self.player.take_hit()
-            if took_damage:
-                self.sfx.play("crash")
-                # Remove the specific object that hit
-                for obj in list(self.enemies) + list(self.blockers):
-                    if obj.rect.colliderect(self.player.rect):
-                        obj.kill()
-                if self.player.health <= 0:
-                    self.state = self.STATE_GAMEOVER
-                    pygame.time.set_timer(self.EV_SPAWN_OBSTACLE, 0)
-                    pygame.time.set_timer(self.EV_SPAWN_COIN,     0)
+        # ── Heart collection ──────────────────────────────────────────────────
+        collected_hearts = pygame.sprite.spritecollide(self.player, self.hearts_group, True)
+        for _ in collected_hearts:
+            if self.health_system.current < self.health_system.MAX_HEALTH:
+                self.health_system.current += 1
+            self.sfx.play("star")
 
-        # ── Collision: coins ──────────────────────────────────────────────────
-        collected = pygame.sprite.spritecollide(self.player, self.coins_group, True, pygame.sprite.collide_circle)
-        for _ in collected:
-            self.player.coins += 1
-            self.sfx.play("coin")
-            if self.player.coins >= COINS_PER_STAR:
-                self.player.coins -= COINS_PER_STAR
-                self.player.stars += 1
-                self.sfx.play("star")
-            if self.player.stars >= STARS_TO_WIN:
-                self.state = self.STATE_VICTORY
-                pygame.time.set_timer(self.EV_SPAWN_OBSTACLE, 0)
-                pygame.time.set_timer(self.EV_SPAWN_COIN,     0)
+        # ── Interactions ──────────────────────────────────────────────────────
+        new_state = self.collision_system.process_interactions(
+            self.player, self.enemies, self.blockers, self.coins_group, 
+            self.health_system, self.score_system
+        )
+        
+        # Check if player just earned a star → trigger boost
+        if self.score_system.just_earned_star:
+            self.score_system.just_earned_star = False
+            self.boost_timer = 600 if self.score_system.mode == 3 else 300  # 10s endless, 5s others
+            # Clear all obstacles from the road
+            for enemy in list(self.enemies):
+                enemy.kill()
+            for blocker in list(self.blockers):
+                blocker.kill()
+            self.sfx.play("star")
+        
+        if new_state == "GAMEOVER":
+            self.state = self.STATE_GAMEOVER
+            # Check for new Endless record
+            if self.score_system.mode == 3:
+                self.is_new_record = self.record.check_and_update(self.score_system.distance)
+            else:
+                self.is_new_record = False
+            self.sfx.play("lose")
+            self.sfx.stop_music()
+            pygame.time.set_timer(self.EV_SPAWN_OBSTACLE, 0)
+            pygame.time.set_timer(self.EV_SPAWN_COIN,     0)
+        elif new_state == "VICTORY":
+            self.state = self.STATE_VICTORY
+            self.sfx.play("win")
+            self.sfx.stop_music()
+            pygame.time.set_timer(self.EV_SPAWN_OBSTACLE, 0)
+            pygame.time.set_timer(self.EV_SPAWN_COIN,     0)
 
     # ── Draw ──────────────────────────────────────────────────────────────────
     def draw(self):
-        # ── START ─────────────────────────────────────────────────────────────
         if self.state == self.STATE_START:
-            self.screen.fill((15, 15, 25))
-            # Animated road in background (draw road but no player shown)
-            self.road.draw(self.screen)
-            # Dark translucent overlay
-            overlay = pygame.Surface((WIDTH, HEIGHT), pygame.SRCALPHA)
-            overlay.fill((0, 0, 0, 160))
-            self.screen.blit(overlay, (0, 0))
-
-            title = self.font_title.render("ROAD RUSH", True, GOLD)
-            sub   = self.font_medium.render("Dodge traffic. Collect Stars. Survive.", True, GRAY)
-            hint  = self.font_small.render("← → Arrow Keys  (or A / D)  to steer", True, GRAY)
-            tap   = self.font_big.render("TAP TO START", True, WHITE)
-
-            self.screen.blit(title, (WIDTH//2 - title.get_width()//2, HEIGHT//4 - 20))
-            self.screen.blit(sub,   (WIDTH//2 - sub.get_width()//2,   HEIGHT//4 + 70))
-            self.screen.blit(hint,  (WIDTH//2 - hint.get_width()//2,  HEIGHT//4 + 110))
-
-            # Pulsate "TAP TO START"
-            alpha = int(155 + 100 * abs(pygame.time.get_ticks() % 1000 / 500 - 1))
-            tap_surf = pygame.Surface(tap.get_size(), pygame.SRCALPHA)
-            tap_surf.blit(tap, (0, 0))
-            tap_surf.set_alpha(alpha)
-            self.screen.blit(tap_surf, (WIDTH//2 - tap.get_width()//2, HEIGHT * 2 // 3))
-
-        # ── PLAYING ───────────────────────────────────────────────────────────
+            self.feedback.draw_start_screen(self.screen, self.road)
+            
         elif self.state == self.STATE_PLAYING:
             self.road.draw(self.screen)
-
-            # Critical mode vignette
-            if self.player.health == 1:
+            if self.health_system.current == 1:
                 vignette = pygame.Surface((WIDTH, HEIGHT), pygame.SRCALPHA)
                 vignette.fill((180, 0, 0, 40))
                 self.screen.blit(vignette, (0, 0))
-
-            # Sprites
             self.all_sprites.draw(self.screen)
+            self.hud.draw(self.screen, self.health_system, self.score_system, self.progression, self.record, getattr(self, 'boost_timer', 0))
+            self.feedback.draw_tutorial(self.screen, self.tutorial_timer)
 
-            # ── HUD: Hearts (top-left) ────────────────────────────────────────
-            for i in range(MAX_HEALTH):
-                draw_heart(self.screen, 14 + i * 32, 14, filled=(i < self.player.health))
+        elif self.state == self.STATE_PAUSED:
+            self.road.draw(self.screen)
+            if self.health_system.current == 1:
+                vignette = pygame.Surface((WIDTH, HEIGHT), pygame.SRCALPHA)
+                vignette.fill((180, 0, 0, 40))
+                self.screen.blit(vignette, (0, 0))
+            self.all_sprites.draw(self.screen)
+            self.hud.draw(self.screen, self.health_system, self.score_system, self.progression)
+            
+            self.feedback.draw_pause_screen(self.screen)
 
-            # ── HUD: Stars (top-right) ────────────────────────────────────────
-            for i in range(STARS_TO_WIN):
-                sx = WIDTH - 14 - (STARS_TO_WIN - i) * 34
-                draw_star(self.screen, sx, 12, filled=(i < self.player.stars))
-
-            # ── HUD: Coin counter (below stars) ───────────────────────────────
-            coin_txt = self.font_small.render(f"Coins: {self.player.coins}/{COINS_PER_STAR}", True, GOLD)
-            self.screen.blit(coin_txt, (WIDTH - coin_txt.get_width() - 14, 50))
-
-            # ── HUD: Speed indicator (bottom-left) ────────────────────────────
-            spd_pct = (self.speed - INITIAL_SPEED) / (MAX_SPEED - INITIAL_SPEED)
-            spd_txt = self.font_small.render(f"Speed  {int(self.speed * 20)} km/h", True, GRAY)
-            self.screen.blit(spd_txt, (14, HEIGHT - 36))
-            bar_w = int(160 * spd_pct)
-            pygame.draw.rect(self.screen, DARK_GRAY, (14, HEIGHT - 16, 160, 8), border_radius=4)
-            bar_color = GREEN if spd_pct < 0.6 else (ORANGE if spd_pct < 0.85 else RED)
-            if bar_w > 0:
-                pygame.draw.rect(self.screen, bar_color, (14, HEIGHT - 16, bar_w, 8), border_radius=4)
-
-            # ── Tutorial banner ───────────────────────────────────────────────
-            if self.tutorial_timer > 0:
-                alpha = min(255, self.tutorial_timer * 4)
-                tut_bg = pygame.Surface((WIDTH - 40, 44), pygame.SRCALPHA)
-                tut_bg.fill((0, 0, 0, int(alpha * 0.7)))
-                self.screen.blit(tut_bg, (20, HEIGHT // 2 + 80))
-                tut = self.font_small.render("← → Tap to Steer  |  Avoid traffic  |  Collect Coins!", True, WHITE)
-                tut.set_alpha(alpha)
-                self.screen.blit(tut, (WIDTH//2 - tut.get_width()//2, HEIGHT // 2 + 90))
-
-        # ── GAME OVER ─────────────────────────────────────────────────────────
         elif self.state == self.STATE_GAMEOVER:
-            self.screen.fill((10, 5, 5))
-            overlay = pygame.Surface((WIDTH, HEIGHT), pygame.SRCALPHA)
-            overlay.fill((80, 0, 0, 120))
-            self.screen.blit(overlay, (0, 0))
+            self.feedback.draw_gameover_screen(self.screen, self.score_system, self.record, getattr(self, 'is_new_record', False))
 
-            go  = self.font_big.render("GAME OVER", True, RED)
-            sub = self.font_medium.render(f"You collected {self.player.stars} / {STARS_TO_WIN} Stars", True, GRAY)
-            tap = self.font_small.render("Tap anywhere to return to menu", True, GRAY)
-
-            self.screen.blit(go,  (WIDTH//2 - go.get_width()//2,  HEIGHT//3 - 30))
-            self.screen.blit(sub, (WIDTH//2 - sub.get_width()//2, HEIGHT//3 + 40))
-            # Show how many hearts were lost
-            for i in range(MAX_HEALTH):
-                draw_heart(self.screen, WIDTH//2 - 48 + i * 32, HEIGHT//3 + 100, filled=False)
-            self.screen.blit(tap, (WIDTH//2 - tap.get_width()//2, HEIGHT * 2 // 3))
-
-        # ── VICTORY ───────────────────────────────────────────────────────────
         elif self.state == self.STATE_VICTORY:
-            self.screen.fill((5, 15, 5))
-            overlay = pygame.Surface((WIDTH, HEIGHT), pygame.SRCALPHA)
-            overlay.fill((0, 120, 0, 80))
-            self.screen.blit(overlay, (0, 0))
-
-            vic  = self.font_big.render("VICTORY!", True, GOLD)
-            sub  = self.font_medium.render("You collected all 3 Stars!", True, GREEN)
-            tap  = self.font_small.render("Tap anywhere to return to menu", True, GRAY)
-
-            self.screen.blit(vic, (WIDTH//2 - vic.get_width()//2, HEIGHT//3 - 30))
-            self.screen.blit(sub, (WIDTH//2 - sub.get_width()//2, HEIGHT//3 + 40))
-            for i in range(STARS_TO_WIN):
-                draw_star(self.screen, WIDTH//2 - 52 + i * 38, HEIGHT//3 + 100, filled=True)
-            self.screen.blit(tap, (WIDTH//2 - tap.get_width()//2, HEIGHT * 2 // 3))
+            self.feedback.draw_victory_screen(self.screen, self.score_system)
 
         pygame.display.flip()
 
