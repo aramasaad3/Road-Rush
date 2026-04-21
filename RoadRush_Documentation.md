@@ -777,3 +777,60 @@ This paints the asphalt and the moving white stripes dividing the lanes.
 *   **Lines 28–31:** When you press ESC, the entire game pauses. To make it *"look"* paused, we create a piece of virtual glass the exact size of the screen (`WIDTH, HEIGHT`). We tint that glass slightly black (`SHADOW`), and then we slap it directly over the camera (`surface.blit`). This dims the entire game instantly to indicate it is paused while we paint the "PAUSED" text on top of it.
 
 
+
+
+# Road Rush: Line-by-Line Documentation
+**Prepared for Development Teams & Academic Review**
+
+---
+
+## Part 10: Understanding `self` and `Sprite` 
+*(A line-by-line breakdown of how we create cars)*
+
+To truly understand where `self` comes from and what a `Sprite` is, we have to look exactly at lines 25 through 37 in **`models/entities.py`**. This is the exact code that builds the Player's car.
+
+Here is the line-by-line breakdown of the code:
+
+### Where does "Sprite" come from?
+```python
+1: import pygame
+...
+25: class Player(pygame.sprite.Sprite):
+```
+*   **Line 1:** We import the giant Pygame library, which contains thousands of pre-written tools made by other developers.
+*   **Line 25:** This is where `Sprite` comes from. A "Sprite" is just a Pygame tool that handles drawing 2D pictures and calculating math hitboxes automatically. By writing `(pygame.sprite.Sprite)` in the parentheses, our `Player` class legally "inherits" all the powers of a Pygame Sprite. 
+
+### Where does `self` come from?
+```python
+26:     def __init__(self):
+27:         super().__init__()
+```
+*   **Line 26:** This is the absolute core of your question. `__init__` means "Initialize" (or "Birth"). It is the very first function that runs the millisecond a car is created. 
+*   **But why `(self)`?** In Python, whenever a Class creates a specific object (like creating physical Car #1), that object needs a way to refer to its own physical body. Python *forces* you to write `self` as the very first word in the parentheses. `self` is literally a variable representing "the specific car being born right now."
+*   **Line 27:** `super().__init__()` tells the Pygame `Sprite` tool to wake up and attach itself to our new car.
+
+### Using `self` to attach data to the car
+```python
+28:         self.image_normal = pygame.Surface((CAR_W, CAR_H), pygame.SRCALPHA)
+29:         _draw_car(self.image_normal, BLUE, BLUE_LIGHT, CAR_W, CAR_H)
+30:         self.image = self.image_normal
+```
+*   **Line 28:** If we just typed `image_normal = ...`, the image would vanish the second the `__init__` function finished running. By typing `self.image_normal`, we staple the image directly to the body of the car permanently.
+*   **Line 30:** `self.image` is a magic variable. Because our car is a `pygame.sprite.Sprite`, Pygame secretly looks directly at `self.image` every single frame to know what picture to draw on the screen.
+
+### Using `self` for math and collision
+```python
+32:         self.rect = self.image.get_rect()
+33:         self.radius = CAR_W // 2
+...
+35:         self.lane_index = 1
+36:         self.rect.centerx = RoadSystem.get_lane_x(self.lane_index)
+```
+*   **Line 32:** `self.rect` is the second magic Sprite variable. `get_rect()` draws an invisible mathematical box exactly the size of `self.image`. Pygame uses `self.rect` to know if your car crashed into a wall.
+*   **Line 35 & 36:** We set `self.lane_index = 1`. Because we used `self`, we can access `self.lane_index` 200 lines later in another file to know exactly what lane this specific car is driving in.
+
+### SUMMARY FOR TEACHERS:
+If the teacher asks: 
+*   **"What is a Sprite?"** -> *"A Sprite is a built-in Pygame tool we imported that automatically handles the math for 2D images (`self.image`) and hitboxes (`self.rect`)."*
+*   **"What is self?"** -> *"Self is a requirement in Python Object-Oriented Programming. It is a label that allows a specific object to refer to its own personal data. If we just typed `health = 3`, the code would crash because it wouldn't know WHOSE health. We type `self.health = 3` so the specific car knows we are talking about its specific body."*
+

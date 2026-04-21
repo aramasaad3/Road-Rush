@@ -25,12 +25,13 @@ ORANGE     = (255, 140, 0  )
 GREEN      = (80,  220, 100)
 SHADOW     = (0,   0,   0,  90)
 
+#car size
 CAR_W   = 54
 CAR_H   = 90
 COIN_R  = 12
 
 INVINCIBILITY_FRAMES   = 90
-RED_CAR_TRACK_FRAMES   = 50
+RED_CAR_TRACK_FRAMES   = 90
 
 DASH_HEIGHT = 30
 DASH_GAP    = 30
