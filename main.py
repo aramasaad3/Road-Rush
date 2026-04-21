@@ -208,13 +208,13 @@ class Game:
         
         if self.score_system.just_earned_star:
             self.score_system.just_earned_star = False
-            self.boost_timer = 600 if self.score_system.mode == 3 else 300
-
-            for enemy in list(self.enemies):
-                enemy.kill()
-            for blocker in list(self.blockers):
-                blocker.kill()
             self.sfx.play("star")
+            if self.score_system.mode == 3:
+                self.boost_timer = 600
+                for enemy in list(self.enemies):
+                    enemy.kill()
+                for blocker in list(self.blockers):
+                    blocker.kill()
         
         if new_state == "GAMEOVER":
             self.state = self.STATE_GAMEOVER
