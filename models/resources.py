@@ -45,8 +45,8 @@ class ScoreSystem:
         self.mode = mode
         self.coins = 0
         self.stars = 0
-        self.distance = 0.0 # Tracks distance in Endless mode
-        self.just_earned_star = False  # Flag for boost trigger
+        self.distance = 0.0
+        self.just_earned_star = False
         if mode == 3:
             self.COINS_PER_STAR = 30
             self.STARS_TO_WIN = 99999
@@ -70,5 +70,5 @@ class ScoreSystem:
         self.distance += speed * 0.1
 
     def check_victory(self):
-        if self.mode == 3: return False # Endless never wins
+        if self.mode == 3: return False
         return self.stars >= self.STARS_TO_WIN

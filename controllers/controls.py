@@ -40,7 +40,7 @@ class InputHandler:
 
     @staticmethod
     def get_pause_interaction(event, screen_width, screen_height):
-        # Allow pressing ESC again to instantly resume
+
         if event.type == pygame.KEYDOWN and event.key == pygame.K_ESCAPE:
             return "RESUME"
             

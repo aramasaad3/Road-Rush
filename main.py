@@ -22,12 +22,8 @@ from controllers.controls import InputHandler
 from views.hud import HUD, load_font
 from views.feedback import FeedbackScreens
 
-
-# ─────────────────────────────────────────────────────────────────────────────
-# Main Game class
-# ─────────────────────────────────────────────────────────────────────────────
 class Game:
-    # ── States ────────────────────────────────────────────────────────────────
+
     STATE_START    = "START"
     STATE_PLAYING  = "PLAYING"
     STATE_GAMEOVER = "GAMEOVER"
@@ -42,7 +38,6 @@ class Game:
         self.clock  = pygame.time.Clock()
         self.running = True
 
-        # Fonts
         self.font_title  = load_font(64)
         self.font_big    = load_font(46)
         self.font_medium = load_font(28)
@@ -50,7 +45,6 @@ class Game:
         self.hud = HUD(self.font_small)
         self.feedback = FeedbackScreens(self.font_title, self.font_big, self.font_medium, self.font_small)
 
-        # Custom events
         self.EV_SPAWN_OBSTACLE = pygame.USEREVENT + 1
         self.EV_SPAWN_COIN     = pygame.USEREVENT + 2
 
@@ -69,17 +63,13 @@ class Game:
         
         self.collision_system = CollisionSystem(self.sfx)
 
-        # Road
         self.road_system = RoadSystem()
         self.road = RoadRenderer(self.road_system)
 
-        # State
         self.state = self.STATE_START
 
-        # Persistent record for Endless mode
         self.record = RecordSystem()
 
-        # Placeholders so draw() never crashes before new_game()
         self.player = Player()
         self.all_sprites = pygame.sprite.Group(self.player)
         self.enemies     = pygame.sprite.Group()
@@ -88,9 +78,8 @@ class Game:
         self.progression = ProgressionSystem(1)
         self.health_system = HealthSystem()
         self.score_system = ScoreSystem(1)
-        self.tutorial_timer = 180  # frames to show tutorial
+        self.tutorial_timer = 180
 
-    # ── New / restart game ────────────────────────────────────────────────────
     def new_game(self, mode):
         self.current_mode = mode
         self.progression = ProgressionSystem(mode)
@@ -106,18 +95,15 @@ class Game:
         self.health_system = HealthSystem()
         self.score_system = ScoreSystem(mode)
         self.tutorial_timer = 180
-        self.boost_timer = 0  # frames remaining for coin boost
+        self.boost_timer = 0
         self.boost_speed_bonus = 3.0
         self.spawner = Spawner(self.player, self.all_sprites, self.enemies, self.blockers, self.coins_group, mode)
         self.hearts_group = pygame.sprite.Group()
-        self.next_heart_distance = 500  # first heart at 500m
+        self.next_heart_distance = 500
 
         pygame.time.set_timer(self.EV_SPAWN_OBSTACLE, Spawner.OBSTACLE_SPAWN_INIT_MS)
         pygame.time.set_timer(self.EV_SPAWN_COIN,     Spawner.COIN_SPAWN_MS)
 
-
-
-    # ── Event handling ────────────────────────────────────────────────────────
     def handle_events(self):
         for event in pygame.event.get():
             if event.type == pygame.QUIT:
@@ -128,7 +114,6 @@ class Game:
                     pygame.mixer.music.pause()
                     self.state = self.STATE_PAUSED
 
-            # ── START screen ──────────────────────────────────────────────────
             elif self.state == self.STATE_START:
                 mode = InputHandler.get_mode_selection(event, WIDTH, HEIGHT)
                 if mode is not None:
@@ -137,7 +122,6 @@ class Game:
                         self.sfx.play_music(self.r_path_func("assets/sounds/lnplusmusic-racing-speed-driving-music-416549.mp3"))
                     self.new_game(mode)
 
-            # ── PAUSED screen ─────────────────────────────────────────────────
             elif self.state == self.STATE_PAUSED:
                 action = InputHandler.get_pause_interaction(event, WIDTH, HEIGHT)
                 if action == "RESUME":
@@ -148,18 +132,16 @@ class Game:
                     if getattr(self, 'r_path_func', None):
                         self.sfx.play_music(self.r_path_func("assets/sounds/spinopel-speed-race-344521.mp3"))
 
-            # ── GAMEOVER / VICTORY screen ─────────────────────────────────────
             elif self.state in (self.STATE_GAMEOVER, self.STATE_VICTORY):
                 if InputHandler.is_menu_advance_event(event):
                     self.state = self.STATE_START
                     if getattr(self, 'r_path_func', None):
                         self.sfx.play_music(self.r_path_func("assets/sounds/spinopel-speed-race-344521.mp3"))
 
-            # ── PLAYING ───────────────────────────────────────────────────────
             if self.state == self.STATE_PLAYING:
                 if event.type == self.EV_SPAWN_OBSTACLE:
                     self.spawner.spawn_obstacle()
-                    # Tighten interval as speed grows
+
                     interval = max(
                         Spawner.OBSTACLE_SPAWN_MIN_MS,
                         int(Spawner.OBSTACLE_SPAWN_INIT_MS - (self.progression.speed - self.progression.INITIAL_SPEED) * 150)
@@ -172,43 +154,36 @@ class Game:
                 else:
                     InputHandler.handle_player_input(event, self.player)
 
-    # ── Update ────────────────────────────────────────────────────────────────
     def update(self):
         if self.state != self.STATE_PLAYING:
             return
 
-        # Speed ramp
         self.progression.update()
         
-        # Boost handling
         if self.boost_timer > 0:
             self.boost_timer -= 1
             effective_speed = self.progression.speed + self.boost_speed_bonus
-            # Player is invincible during boost
+
             self.player.inv_frames = max(self.player.inv_frames, 2)
             if self.boost_timer == 0:
-                # Boost just ended, restore normal state
+
                 self.player.inv_frames = 0
         else:
             effective_speed = self.progression.speed
         
         self.score_system.add_distance(effective_speed)
 
-        # Tutorial countdown
         if self.tutorial_timer > 0:
             self.tutorial_timer -= 1
 
-        # Road scroll
         self.road_system.update(effective_speed)
 
-        # Sprites
         self.player.update()
         self.enemies.update(effective_speed)
         self.blockers.update(effective_speed)
         self.coins_group.update(effective_speed)
         self.hearts_group.update(effective_speed)
 
-        # ── Endless mode: spawn heart every 500m ─────────────────────────────
         if self.score_system.mode == 3 and self.score_system.distance >= self.next_heart_distance:
             self.next_heart_distance += 500
             import random
@@ -220,24 +195,21 @@ class Game:
                 self.hearts_group.add(h)
                 self.all_sprites.add(h)
 
-        # ── Heart collection ──────────────────────────────────────────────────
         collected_hearts = pygame.sprite.spritecollide(self.player, self.hearts_group, True)
         for _ in collected_hearts:
             if self.health_system.current < self.health_system.MAX_HEALTH:
                 self.health_system.current += 1
             self.sfx.play("star")
 
-        # ── Interactions ──────────────────────────────────────────────────────
         new_state = self.collision_system.process_interactions(
             self.player, self.enemies, self.blockers, self.coins_group, 
             self.health_system, self.score_system
         )
         
-        # Check if player just earned a star → trigger boost
         if self.score_system.just_earned_star:
             self.score_system.just_earned_star = False
-            self.boost_timer = 600 if self.score_system.mode == 3 else 300  # 10s endless, 5s others
-            # Clear all obstacles from the road
+            self.boost_timer = 600 if self.score_system.mode == 3 else 300
+
             for enemy in list(self.enemies):
                 enemy.kill()
             for blocker in list(self.blockers):
@@ -246,7 +218,7 @@ class Game:
         
         if new_state == "GAMEOVER":
             self.state = self.STATE_GAMEOVER
-            # Check for new Endless record
+
             if self.score_system.mode == 3:
                 self.is_new_record = self.record.check_and_update(self.score_system.distance)
             else:
@@ -262,7 +234,6 @@ class Game:
             pygame.time.set_timer(self.EV_SPAWN_OBSTACLE, 0)
             pygame.time.set_timer(self.EV_SPAWN_COIN,     0)
 
-    # ── Draw ──────────────────────────────────────────────────────────────────
     def draw(self):
         if self.state == self.STATE_START:
             self.feedback.draw_start_screen(self.screen, self.road)
@@ -296,7 +267,6 @@ class Game:
 
         pygame.display.flip()
 
-    # ── Game loop ─────────────────────────────────────────────────────────────
     def run(self):
         while self.running:
             self.handle_events()
@@ -306,8 +276,6 @@ class Game:
         pygame.quit()
         sys.exit()
 
-
-# ─────────────────────────────────────────────────────────────────────────────
 if __name__ == "__main__":
     game = Game()
     game.run()

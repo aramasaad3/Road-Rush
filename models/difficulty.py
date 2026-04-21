@@ -14,7 +14,7 @@ class ProgressionSystem:
             self.INITIAL_SPEED = 2.5
             self.MAX_SPEED = 7.0
             self.SPEED_INCREASE_AMOUNT = 0.5
-        else: # Hard or Endless are much faster and steeper
+        else:
             self.INITIAL_SPEED = 3.5
             self.MAX_SPEED = 16.5
             self.SPEED_INCREASE_AMOUNT = 0.8

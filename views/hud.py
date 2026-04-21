@@ -6,7 +6,7 @@ from models.difficulty import ProgressionSystem
 def draw_heart(surf, x, y, filled=True):
     """Draw a ♥ heart icon at (x, y)."""
     color = RED if filled else (80, 40, 40)
-    # Two circles + triangle approximation
+
     pygame.draw.circle(surf, color, (x + 6,  y + 6),  7)
     pygame.draw.circle(surf, color, (x + 18, y + 6),  7)
     pts = [(x, y + 10), (x + 12, y + 26), (x + 24, y + 10)]
@@ -56,7 +56,6 @@ class HUD:
         coin_txt = self.font_small.render(f"Coins: {score_system.coins}/{score_system.COINS_PER_STAR}", True, GOLD)
         screen.blit(coin_txt, (WIDTH - coin_txt.get_width() - 14, 56 if score_system.mode == 3 else 50))
 
-        # Boost indicator
         if boost_timer > 0:
             boost_secs = boost_timer / 60
             boost_txt = self.font_small.render(f"⚡ BOOST {boost_secs:.1f}s", True, (0, 255, 255))

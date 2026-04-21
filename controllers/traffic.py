@@ -31,11 +31,11 @@ class Spawner:
         free_lanes = [l for l in range(RoadSystem.LANE_COUNT) if l not in occupied]
         
         if not free_lanes:
-            return  # Prevent 4-wall unpassable traps and overlap crashes
+            return
             
         lane = random.choice(free_lanes)
         r    = random.random()
-        if self.mode == 2:  # Hard mode: more yellow cars
+        if self.mode == 2:
             blocker_thresh = 0.10
             yellow_thresh  = 0.75
         else:

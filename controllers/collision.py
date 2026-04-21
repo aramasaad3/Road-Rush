@@ -7,7 +7,7 @@ class CollisionSystem:
 
     def process_interactions(self, player, enemies, blockers, coins_group, health_system, score_system):
         """Processes all collisions and returns a new game state string if needed, or None."""
-        # ── Collision: enemy / blocker → damage ───────────────────────────────
+
         hit_enemy   = check_collisions_aabb(player, enemies, 0.75)
         hit_blocker = check_collisions_aabb(player, blockers, 0.75)
 
@@ -15,7 +15,7 @@ class CollisionSystem:
             if player.take_hit():
                 health_system.take_damage()
                 self.sfx.play("crash")
-                # Remove the specific object that hit
+
                 colliding_enemies = get_colliding_objects(player, enemies)
                 colliding_blockers = get_colliding_objects(player, blockers)
                 for obj in colliding_enemies + colliding_blockers:
@@ -23,7 +23,6 @@ class CollisionSystem:
                 if health_system.is_dead():
                     return "GAMEOVER"
 
-        # ── Collision: coins ──────────────────────────────────────────────────
         collected = check_collisions_circle(player, coins_group, dokill=True)
         for _ in collected:
             earned_star = score_system.add_coin()

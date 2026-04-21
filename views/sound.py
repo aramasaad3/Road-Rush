@@ -13,7 +13,7 @@ class SoundManager:
             snd = pygame.mixer.Sound(path)
             self._sounds[name] = snd
         except Exception:
-            pass  # file missing → silence
+            pass
 
     def play(self, name):
         snd = self._sounds.get(name)

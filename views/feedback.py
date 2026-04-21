@@ -58,7 +58,6 @@ class FeedbackScreens:
         screen.blit(go,  (WIDTH//2 - go.get_width()//2,  HEIGHT//3 - 30))
         screen.blit(sub, (WIDTH//2 - sub.get_width()//2, HEIGHT//3 + 40))
         
-        # Show record for Endless mode
         if score_system.mode == 3 and record is not None:
             if is_new_record:
                 rec_txt = self.font_medium.render("★ NEW RECORD! ★", True, GOLD)

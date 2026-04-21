@@ -10,13 +10,13 @@ class RoadRenderer:
     def _make_tile(self):
         surf = pygame.Surface((WIDTH, self.road.tile_h))
         surf.fill(ROAD_COLOR)
-        # Grass strips
+
         pygame.draw.rect(surf, GRASS_LEFT,  (0, 0, RoadSystem.GRASS_W, self.road.tile_h))
         pygame.draw.rect(surf, GRASS_RIGHT, (RoadSystem.ROAD_RIGHT, 0, RoadSystem.GRASS_W, self.road.tile_h))
-        # Curb lines
+
         pygame.draw.rect(surf, WHITE, (RoadSystem.GRASS_W - 2, 0, 4, self.road.tile_h))
         pygame.draw.rect(surf, WHITE, (RoadSystem.ROAD_RIGHT - 2, 0, 4, self.road.tile_h))
-        # Lane dashes
+
         dash_step = DASH_HEIGHT + DASH_GAP
         for lane in range(1, RoadSystem.LANE_COUNT):
             lx = RoadSystem.ROAD_LEFT + lane * RoadSystem.LANE_WIDTH - DASH_WIDTH // 2
