@@ -37,10 +37,13 @@ class Spawner:
         r    = random.random()
         if self.mode == 2:
             blocker_thresh = 0.10
-            yellow_thresh  = 0.75
+            yellow_thresh  = 0.85  # Increased Yellow to 75% (was 65%)
+        elif self.mode == 3:
+            blocker_thresh = 0.15
+            yellow_thresh  = 0.85  # Increased Yellow to 70% (was 45%)
         else:
             blocker_thresh = 0.20
-            yellow_thresh  = 0.65
+            yellow_thresh  = 0.70
             
         if r < blocker_thresh:
             obj = Blocker(lane, -CAR_H)

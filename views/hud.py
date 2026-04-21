@@ -4,7 +4,6 @@ from models.resources import HealthSystem, ScoreSystem
 from models.difficulty import ProgressionSystem
 
 def draw_heart(surf, x, y, filled=True):
-    """Draw a ♥ heart icon at (x, y)."""
     color = RED if filled else (80, 40, 40)
 
     pygame.draw.circle(surf, color, (x + 6,  y + 6),  7)
@@ -13,7 +12,6 @@ def draw_heart(surf, x, y, filled=True):
     pygame.draw.polygon(surf, color, pts)
 
 def draw_star(surf, x, y, filled=True):
-    """Draw a ★ star outline at (x, y)."""
     color = GOLD if filled else (80, 70, 20)
     cx, cy = x + 13, y + 13
     pts = []

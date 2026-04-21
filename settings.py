@@ -5,6 +5,7 @@ HEIGHT = 800
 FPS    = 60
 TITLE  = "Road Rush"
 
+#colors
 WHITE      = (255, 255, 255)
 BLACK      = (0,   0,   0  )
 RED        = (220, 50,  50 )

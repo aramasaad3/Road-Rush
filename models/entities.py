@@ -4,10 +4,21 @@ from settings import *
 from models.road import RoadSystem
 
 def _draw_car(surface, body_color, accent_color, w, h):
+    """Draw a stylized top-down car onto *surface* (which is w×h)."""
+
     pygame.draw.rect(surface, body_color, (4, 8, w-8, h-16), border_radius=10)
+
     pygame.draw.rect(surface, accent_color, (8, h//4, w-16, h//3), border_radius=6)
+
     pygame.draw.rect(surface, (255, 255, 200), (6, 8, 10, 8), border_radius=3)
     pygame.draw.rect(surface, (255, 255, 200), (w-16, 8, 10, 8), border_radius=3)
+
+    pygame.draw.rect(surface, (220, 60, 60), (6, h-20, 10, 8), border_radius=3)
+    pygame.draw.rect(surface, (220, 60, 60), (w-16, h-20, 10, 8), border_radius=3)
+
+    for x in (3, w-11):
+        for y in (12, h-28):
+            pygame.draw.rect(surface, BLACK, (x, y, 8, 16), border_radius=4)
 
 STEER_LERP = 0.18
 
